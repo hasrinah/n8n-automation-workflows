@@ -1,0 +1,303 @@
+{
+  "name": "Early-Leave Approval Request",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "early-leave-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -656,
+        -64
+      ],
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -480,
+        -64
+      ],
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Early Leave Requests"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Employee Name": "={{ $json.employeename }}",
+            "Superior": "={{ $json.superior }}",
+            "Position": "={{ $json.position }}",
+            "Contact No": "={{ $json.contactno }}",
+            "Working Hours": "={{ $json.workinghours }}",
+            "Replacement": "={{ $json.replacement }}",
+            "Reason": "={{ $json.reason }}",
+            "Id": "={{ $json.submission_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "displayName": "Id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "displayName": "Employee Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Superior",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Position",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Contact No",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Working Hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Replacement",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "displayName": "Approval",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -144,
+        -48
+      ],
+      "name": "Append row in sheet"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n\nfunction safeText(v) {\n  if (v === null || v === undefined) return \"\";\n  return String(v).trim();\n}\n\nfunction joinArray(arr) {\n  if (!Array.isArray(arr)) return \"\";\n  return arr.map(x => safeText(x)).filter(Boolean).join(\" / \");\n}\n\n// Accept array OR string, and also try alternate field names\nfunction getWorkingHours(body) {\n  const candidates = [\n    body.workinghours,\n    body.working_hours,\n    body[\"working hours\"],\n    body[\"Working Hours\"],\n  ];\n\n  for (const c of candidates) {\n    if (Array.isArray(c) && c.length) return joinArray(c);\n    if (typeof c === \"string\" && safeText(c)) return safeText(c);\n  }\n  return \"\";\n}\n\n// ---- main ----\nconst input = items[0].json || {};\nconst body = input.body || {};\n\n// Unique submission id\nconst executionId = safeText($execution.id);\nconst now = new Date();\nconst isoNow = now.toISOString();\nconst submission_id = executionId ? executionId : `SUB-${Date.now()}`;\n\n// Fields\nconst employeename = safeText(body.employeename);\nconst contactno    = safeText(body.contactno);\nconst position     = safeText(body.position);\nconst superior     = safeText(body.superior);\nconst reason       = safeText(body.reason);\nconst replacement  = safeText(body.replacement);\nconst replacement_comment = safeText(body.replacement_comment);\n\n// Working hours (FIXED)\nconst workinghours = getWorkingHours(body);\n\n// Deadline +2 days\nconst deadlineDate = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);\nconst deadline_iso = deadlineDate.toISOString();\nconst deadline_display = deadlineDate.toLocaleString(\"en-GB\", {\n  day: \"2-digit\",\n  month: \"short\",\n  year: \"numeric\",\n  hour: \"2-digit\",\n  minute: \"2-digit\",\n  hour12: false,\n});\n\nreturn [\n  {\n    json: {\n      submission_id,\n      submitted_at_iso: isoNow,\n      employeename,\n      contactno,\n      position,\n      superior,\n      workinghours,\n      replacement,\n      \n      reason,\n      deadline_iso,\n      deadline_display,\n      approval: \"\",\n      approval_by: \"\",\n      approval_at: \"\",\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        -64
+      ],
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Early Leave Requests"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 2128421815,
+          "mode": "list",
+          "cachedResultName": "superiror_key"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "superior_key",
+              "lookupValue": "={{ $json.Superior }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        48,
+        32
+      ],
+      "name": "Get row(s) in sheet"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        208,
+        -144
+      ],
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.superior_email }}",
+        "subject": "=HOD Approval Required [{{ $json[\"Id\"] }}] - {{ $json[\"Employee Name\"] }}",
+        "message": "=Dear {{ $json[\"Superior\"] }},<br><br>\n\nI am writing to request your approval for Puasa (fasting month) application submitted by your staff member.<br><br>\n\n<b>Applicant details</b><br>\n<ul>\n  <li><b>Employee Name:</b> {{ $json[\"Employee Name\"] }}</li>\n  <li><b>Superior:</b> {{ $json[\"Superior\"] }}</li>\n  <li><b>Position:</b> {{ $json[\"Position\"] }}</li>\n</ul>\n\n<b>Application details</b><br>\n<ul>\n  <li><b>Working hours:</b> {{ $json[\"Working Hours\"] }}</li>\n  <li><b>Replacement Hours (working through lunch time):</b> {{ $json[\"Replacement\"] }}</li>\n  <li><b>Reason / Notes from Employee:</b> {{ $json[\"Reason\"] }}</li>\n</ul>\n\n<b>Action required</b><br>\nPlease click one option below:<br><br>\n\n<a href=\"https://YOUR_N8N_DOMAIN/webhook/early-leave-decision?id={{ $json[\"Id\"] }}&action=APPROVE\"\n   style=\"display:inline-block;padding:10px 16px;border:1px solid #333;border-radius:6px;text-decoration:none;\">\n  APPROVE\n</a>\n\n&nbsp;&nbsp;\n\n<a href=\"https://YOUR_N8N_DOMAIN/webhook/early-leave-decision?id={{ $json[\"Id\"] }}&action=REJECT\"\n   style=\"display:inline-block;padding:10px 16px;border:1px solid #333;border-radius:6px;text-decoration:none;\">\n  REJECT\n</a>\n\n<br><br>\n\n<b>Deadline for response:</b> {{ $json.deadline_display || \"Please respond within 24 hours\" }}<br><br>\n\nIf you approve, HR/Admin will proceed with updating the roster/records accordingly.<br><br>\n\nThank you.<br><br>\n\nRegards,<br>\nHR Team",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        384,
+        -48
+      ],
+      "name": "Send a message1"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}

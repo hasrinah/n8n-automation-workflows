@@ -1,0 +1,154 @@
+{
+  "name": "Temperature Monitoring (Hourly Telegram Report)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -192,
+        -16
+      ],
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://influxdb:8086/api/v2/query?org=YOUR_ORG",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Token YOUR_INFLUXDB_TOKEN"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/vnd.flux"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/vnd.flux",
+        "body": "from(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] =~ /^1\\/1\\/CB(1M|2M|1[1-8]|2[1-8])\\/tmp$/)\n  |> group(columns: [\"topic\"])\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"latest_tmp\")\n\n\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"dist\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/11/ChD1/dist\")\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"latest_dist_chiller\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"DS1\")\n  |> filter(fn: (r) => r[\"topic\"] == \"PR/CR1/BRT38/DS1\")\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"latest_dist1_c1\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/11/CrM1/tmp\")\n  |> last()\n  |> yield(name: \"CHILLER_door\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"def\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/11/ETC11/def\")\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"activity\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"telemetry\")\n  |> filter(fn: (r) => r[\"_field\"] == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/1/C1D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"C1_DOOR\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/1/CK3F1/def\")\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"cr1b1_defrost\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/1/CK3F2/def\")\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"cr1b2_defrost\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/1/CK3F3/def\")\n  |> last()\n  |> keep(columns: [\"_time\",\"_value\",\"topic\",\"signal\",\"equipment\",\"sensor_id\",\"site\"])\n  |> yield(name: \"cr1b3_defrost\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/10/B6D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"B6_DOOR\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/2/C2D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"C2_DOOR\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/9/B5D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"B5_DOOR\")\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/3/C3D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"C3_DOOR\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/4/C4D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"C4_DOOR\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/5/B1D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"B1_DOOR\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/6/B2D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"B2_DOOR\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/7/B3D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"B3_DOOR\")\n\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/8/B4D1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"B4_DOOR\")\n\n// ============================================================\n// LOADING BAY 1 - L1\n// Topic: 1/25/LB1/tmp\n// ============================================================\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/25/LB1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"L1\")\n\n\n// ============================================================\n// LOADING BAY 2 - L2\n// Topic: 1/25/LB2/tmp\n// ============================================================\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/25/LB2/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"L2\")\n\n// ============================================================\n// PRODUCTION TEMPERATURE 1 - PRODTEMP1\n// Topic: 1/24/PE1/tmp\n// ============================================================\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/24/PE1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"PRODTEMP1\")\n\n\n// ============================================================\n// PRODUCTION TEMPERATURE 2 - PRODTEMP2\n// Topic: 1/24/PE2/tmp\n// ============================================================\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/24/PE2/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"PRODTEMP2\")\n\n\n// ============================================================\n// PRODUCTION TEMPERATURE 3 - PRODTEMP3\n// Topic: 1/24/PE3/tmp\n// ============================================================\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/24/PE3/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"PRODTEMP3\")\n\n// ============================================================\n// PRODUCTION TEMPERATURE 4 - MARINATION ROOM\n// Topic: 1/23/MR1/tmp\n// ============================================================\n\nfrom(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"telemetry\")\n  |> filter(fn: (r) => r._field == \"value\")\n  |> filter(fn: (r) => r[\"signal\"] == \"tmp\")\n  |> filter(fn: (r) => r[\"topic\"] == \"1/23/MR1/tmp\")\n  |> last()\n  |> keep(columns: [\n      \"_time\",\n      \"_value\",\n      \"topic\",\n      \"signal\",\n      \"equipment\",\n      \"sensor_id\",\n      \"site\"\n  ])\n  |> yield(name: \"PRODTEMP4\")",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        32,
+        -16
+      ],
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.data || \"\";\nconst lines = raw.split(\"\\n\").map(l => l.trim()).filter(Boolean);\n\nif (lines.length < 2) {\n  return [{ json: { error: \"NO_DATA_RECEIVED\" } }];\n}\n\nconst latest = {};\nlet currentHeader = null;\n\n// Parse CSV tables with dynamic headers\nfor (const line of lines) {\n  if (!line) continue;\n\n  // Detect header row\n  if (line.startsWith(\",result,table,\")) {\n    currentHeader = line.split(\",\").map(h => h.trim());\n    continue;\n  }\n\n  if (!currentHeader) continue;\n\n  const cols = line.split(\",\");\n  const row = {};\n\n  for (let i = 0; i < currentHeader.length; i++) {\n    row[currentHeader[i]] = cols[i] !== undefined ? cols[i].trim() : \"\";\n  }\n\n  const topic = row[\"topic\"];\n  const value = parseFloat(row[\"_value\"]);\n  const time = new Date(row[\"_time\"]);\n\n  if (!topic || isNaN(value) || isNaN(time.getTime())) continue;\n\n  if (!latest[topic] || time > latest[topic].time) {\n    latest[topic] = { value, time };\n  }\n}\n\n// Helper\nfunction get(topic) {\n  return latest[topic]?.value ?? null;\n}\n\nfunction getTime(topic) {\n  return latest[topic]?.time ?? null;\n}\n\n// Find newest timestamp from all received data\nlet newestTime = null;\n\nfor (const topic of Object.keys(latest)) {\n  const t = latest[topic].time;\n\n  if (!newestTime || t > newestTime) {\n    newestTime = t;\n  }\n}\n\n// Freshness limit\n// Example: if data is older than 30 minutes compared to newest received data,\n// treat it as disconnected.\nconst DEFROST_MAX_AGE_MINUTES = 30;\n\nfunction isStale(topic, maxAgeMinutes = DEFROST_MAX_AGE_MINUTES) {\n  const topicTime = getTime(topic);\n\n  if (!topicTime || !newestTime) return true;\n\n  const ageMs = newestTime.getTime() - topicTime.getTime();\n  const ageMinutes = ageMs / 1000 / 60;\n\n  return ageMinutes > maxAgeMinutes;\n}\n\n// Helper for 1 / 0 defrost status\nfunction defrostText(value, topic) {\n  if (value === null || value === undefined) return \"Signal Lost\";\n\n  if (isStale(topic)) return \"Signal Lost\";\n\n  if (value === 1) return \"Defrosting ON\";\n  if (value === 0) return \"Defrosting OFF\";\n\n  return `UNKNOWN (${value})`;\n}\n\n/* Distances */\nconst chillerDoorDistance = get(\"1/11/ChD1/dist\");\nconst coldroomDistance = get(\"PR/CR1/BRT38/DS1\");\n\n/* Status */\nlet chillerDoorStatus = \"NO_DATA\";\nif (chillerDoorDistance !== null) {\n  chillerDoorStatus = chillerDoorDistance > 0 ? \"OPEN\" : \"CLOSED\";\n}\n\nlet coldroomStatus = \"NO_DATA\";\nif (coldroomDistance !== null) {\n  coldroomStatus = coldroomDistance > 0 ? \"OPEN\" : \"CLOSED\";\n}\n\n/* Keep old variable name */\nconst chillerDoorTemp = get(\"1/11/CrM1/tmp\");\nconst CHILLER_door = chillerDoorTemp !== null ? chillerDoorTemp.toFixed(2) : null;\n\n/* Activity / Defrost */\nconst activityTopic = \"1/11/ETC11/def\";\nconst activityValue = get(activityTopic);\nconst activity = defrostText(activityValue, activityTopic);\n\n/* CR1B Defrost */\nconst cr1b1Topic = \"1/1/CK3F1/def\";\nconst cr1b2Topic = \"1/1/CK3F2/def\";\nconst cr1b3Topic = \"1/1/CK3F3/def\";\n\nconst cr1b1Value = get(cr1b1Topic);\nconst cr1b2Value = get(cr1b2Topic);\nconst cr1b3Value = get(cr1b3Topic);\n\nconst cr1b1 = defrostText(cr1b1Value, cr1b1Topic);\nconst cr1b2 = defrostText(cr1b2Value, cr1b2Topic);\nconst cr1b3 = defrostText(cr1b3Value, cr1b3Topic);\n\n/* CB Rooms */\nconst cbRoom1Temperature = get(\"1/1/CB1M/tmp\");\nconst cbRoom2Temperature = get(\"1/1/CB2M/tmp\");\n\n/* CB1 Blowers */\nconst cb1BlowerSet1 = {\n  blower1: get(\"1/1/CB11/tmp\"),\n  blower2: get(\"1/1/CB12/tmp\"),\n  blower3: get(\"1/1/CB13/tmp\"),\n  blower4: get(\"1/1/CB14/tmp\"),\n};\n\nconst cb1BlowerSet2 = {\n  blower5: get(\"1/1/CB15/tmp\"),\n  blower6: get(\"1/1/CB16/tmp\"),\n  blower7: get(\"1/1/CB17/tmp\"),\n  blower8: get(\"1/1/CB18/tmp\"),\n};\n\n/* CB2 Blowers */\nconst cb2BlowerSet1 = {\n  blower1: get(\"1/1/CB21/tmp\"),\n  blower2: get(\"1/1/CB22/tmp\"),\n  blower3: get(\"1/1/CB23/tmp\"),\n  blower4: get(\"1/1/CB24/tmp\"),\n};\n\nconst cb2BlowerSet2 = {\n  blower5: get(\"1/1/CB25/tmp\"),\n  blower6: get(\"1/1/CB26/tmp\"),\n  blower7: get(\"1/1/CB27/tmp\"),\n  blower8: get(\"1/1/CB28/tmp\"),\n};\n\n/* Cold Room 1 Door Temperature */\nconst c1DoorTemp = get(\"1/1/C1D1/tmp\");\nconst C1_DOOR =\n  c1DoorTemp !== null\n    ? c1DoorTemp.toFixed(2)\n    : null;\n\n/* Blast 6 Door Temperature */\nconst b6DoorTemp = get(\"1/10/B6D1/tmp\");\nconst B6_DOOR =\n  b6DoorTemp !== null\n    ? b6DoorTemp.toFixed(2)\n    : null;\n\n/* Blast 5 Door Temperature */\nconst b5DoorTemp = get(\"1/9/B5D1/tmp\");\nconst B5_DOOR =\n  b5DoorTemp !== null\n    ? b5DoorTemp.toFixed(2)\n    : null;\n\n/* Cold Room 2 Door Temperature */\nconst c2DoorTemp = get(\"1/2/C2D1/tmp\");\nconst C2_DOOR =\n  c2DoorTemp !== null\n    ? c2DoorTemp.toFixed(2)\n    : null;\n\n/* Cold Room 3 Door Temperature */\nconst c3DoorTemp = get(\"1/3/C3D1/tmp\");\nconst C3_DOOR =\n  c3DoorTemp !== null\n    ? c3DoorTemp.toFixed(2)\n    : null;\n\n/* Cold Room 4 Door Temperature */\nconst c4DoorTemp = get(\"1/4/C4D1/tmp\");\nconst C4_DOOR =\n  c4DoorTemp !== null\n    ? c4DoorTemp.toFixed(2)\n    : null;\n\n/* Blast 1 Door Temperature */\nconst b1DoorTemp = get(\"1/5/B1D1/tmp\");\nconst B1_DOOR =\n  b1DoorTemp !== null\n    ? b1DoorTemp.toFixed(2)\n    : null;\n\n/* Blast 2 Door Temperature */\nconst b2DoorTemp = get(\"1/6/B2D1/tmp\");\nconst B2_DOOR =\n  b2DoorTemp !== null\n    ? b2DoorTemp.toFixed(2)\n    : null;\n\n/* Blast 3 Door Temperature */\nconst b3DoorTemp = get(\"1/7/B3D1/tmp\");\nconst B3_DOOR =\n  b3DoorTemp !== null\n    ? b3DoorTemp.toFixed(2)\n    : null;\n\n/* Blast 4 Door Temperature */\nconst b4DoorTemp = get(\"1/8/B4D1/tmp\");\nconst B4_DOOR =\n  b4DoorTemp !== null\n    ? b4DoorTemp.toFixed(2)\n    : null;\n\n/* Loading Bay 1 Temperature */\nconst l1Temp = get(\"1/25/LB1/tmp\");\nconst L1 =\n  l1Temp !== null\n    ? l1Temp.toFixed(2)\n    : null;\n\n/* Loading Bay 2 Temperature */\nconst l2Temp = get(\"1/25/LB2/tmp\");\nconst L2 =\n  l2Temp !== null\n    ? l2Temp.toFixed(2)\n    : null;\n\n/* Production Temperature 1 */\nconst prodTemp1 = get(\"1/24/PE1/tmp\");\nconst PRODTEMP1 =\n  prodTemp1 !== null\n    ? prodTemp1.toFixed(2)\n    : null;\n\n/* Production Temperature 2 */\nconst prodTemp2 = get(\"1/24/PE2/tmp\");\nconst PRODTEMP2 =\n  prodTemp2 !== null\n    ? prodTemp2.toFixed(2)\n    : null;\n\n/* Production Temperature 3 */\nconst prodTemp3 = get(\"1/24/PE3/tmp\");\nconst PRODTEMP3 =\n  prodTemp3 !== null\n    ? prodTemp3.toFixed(2)\n    : null;\n\n/* Production Temperature 4 - Marination Room */\nconst prodTemp4 = get(\"1/23/MR1/tmp\");\nconst PRODTEMP4 =\n  prodTemp4 !== null\n    ? prodTemp4.toFixed(2)\n    : null;\n\nreturn [{\n  json: {\n    C1_DOOR,\n    C2_DOOR,\n    C3_DOOR,\n    C4_DOOR,\n\n    CHILLER_door,\n    \n    L1,\n    L2,\n    \n    PRODTEMP1,\n    PRODTEMP2,\n    PRODTEMP3,\n    PRODTEMP4,\n    \n    B1_DOOR,\n    B2_DOOR,\n    B3_DOOR,\n    B4_DOOR,\n    B5_DOOR,\n    B6_DOOR,\n\n    activityValue,\n    activity,\n\n    cr1b1Value,\n    cr1b1,\n    cr1b2Value,\n    cr1b2,\n    cr1b3Value,\n    cr1b3,\n\n    chillerDoorDistance,\n    chillerDoorStatus,\n    coldroomDistance,\n    coldroomStatus,\n\n    cbRoom1Temperature,\n    cbRoom2Temperature,\n\n    cb1Blowers: {\n      set1: cb1BlowerSet1,\n      set2: cb1BlowerSet2\n    },\n\n    cb2Blowers: {\n      set1: cb2BlowerSet1,\n      set2: cb2BlowerSet2\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        -16
+      ],
+      "name": "Code Chiller"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        640,
+        0
+      ],
+      "name": "Send a text message1",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\n\n// ============================================================\n// HELPERS\n// ============================================================\n\n// Format normal sensor values\nfunction f(v) {\n  return (v === null || v === undefined || v === \"\")\n    ? \"Signal Lost ⚠️\"\n    : v;\n}\n\n// Add °C only when temperature data exists\nfunction temp(v) {\n  return (v === null || v === undefined || v === \"\")\n    ? \"Signal Lost ⚠️\"\n    : `${v} °C`;\n}\n\n// Defrost status\nfunction defrostDisplay(status, value) {\n  if (status === \"Signal Lost\") return \"Signal Lost ⚠️\";\n  if (status === \"Defrosting ON\") return \"Defrosting ON 🟢\";\n  if (status === \"Defrosting OFF\") return \"Defrosting OFF 🔴\";\n\n  // Fallback\n  if (value === 1) return \"Defrosting ON 🟢\";\n  if (value === 0) return \"Defrosting OFF 🔴\";\n\n  return \"Signal Lost ⚠️\";\n}\n\nlet msg = \"\";\n\n\n// ============================================================\n// 1. CHILLER BLAST\n// ============================================================\n\nmsg += \"🌡 <b>Chiller Blast</b>\\n\";\nmsg += `• CB 1: <b>${temp(d.cbRoom1Temperature)}</b>\\n`;\nmsg += `• CB 2: <b>${temp(d.cbRoom2Temperature)}</b>\\n\\n`;\n\n\n// ============================================================\n// 2. CHILLER ROOM\n// ============================================================\n\nmsg += \"🌡 <b>Chiller Room</b>\\n\";\nmsg += `• Door: <b>${temp(d.CHILLER_door)}</b>\\n`;\nmsg += `• Door Distance: <b>${f(d.chillerDoorDistance)}</b> (${f(d.chillerDoorStatus)})\\n`;\nmsg += `• Activity: <b>${defrostDisplay(d.activity, d.activityValue)}</b>\\n\\n`;\n\n\n// ============================================================\n// 3. COLDROOMS\n// ============================================================\n\nmsg += \"🌡 <b>Coldrooms</b>\\n\";\nmsg += `• 1 Door: ${temp(d.C1_DOOR)}\\n`;\nmsg += `• 2 Door: ${temp(d.C2_DOOR)}\\n`;\nmsg += `• 3 Door: ${temp(d.C3_DOOR)}\\n`;\nmsg += `• 4 Door: ${temp(d.C4_DOOR)}\\n`;\n\nmsg += `• CR 1 Door Distance: <b>${f(d.coldroomDistance)}</b> (${f(d.coldroomStatus)})\\n`;\n\nmsg += `• CR1B1: <b>${defrostDisplay(d.cr1b1, d.cr1b1Value)}</b>\\n`;\nmsg += `• CR1B2: <b>${defrostDisplay(d.cr1b2, d.cr1b2Value)}</b>\\n`;\nmsg += `• CR1B3: <b>${defrostDisplay(d.cr1b3, d.cr1b3Value)}</b>\\n\\n`;\n\n\n// ============================================================\n// 4. BLAST FREEZERS\n// ============================================================\n\nmsg += \"🌡 <b>Blast</b>\\n\";\nmsg += `• 1 Door: ${temp(d.B1_DOOR)}\\n`;\nmsg += `• 2 Door: ${temp(d.B2_DOOR)}\\n`;\nmsg += `• 3 Door: ${temp(d.B3_DOOR)}\\n`;\nmsg += `• 4 Door: ${temp(d.B4_DOOR)}\\n`;\nmsg += `• 5 Door: ${temp(d.B5_DOOR)}\\n`;\nmsg += `• 6 Door: ${temp(d.B6_DOOR)}\\n\\n`;\n\n// ============================================================\n// 5. LOADING BAY\n// ============================================================\n\nmsg += \"🌡 <b>Loading Bay</b>\\n\";\nmsg += `• L1: ${temp(d.L1)}\\n`;\nmsg += `• L2: ${temp(d.L2)}\\n\\n`;\n\n\n// ============================================================\n// 6. EXTENSION PRODUCTION AREA\n// ============================================================\n\nmsg += \"🌡 <b>Extension Production Area</b>\\n\";\nmsg += `• 1: ${temp(d.PRODTEMP1)}\\n`;\nmsg += `• 2: ${temp(d.PRODTEMP2)}\\n`;\nmsg += `• 3: ${temp(d.PRODTEMP3)}\\n`;\nmsg += `• 4 (Marination Room): ${temp(d.PRODTEMP4)}\\n`;\n\n\n// ============================================================\n// OUTPUT\n// ============================================================\n\nreturn {\n  json: {\n    message: msg\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "name": "Code1"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code Chiller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Chiller": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Asia/Singapore"
+  }
+}

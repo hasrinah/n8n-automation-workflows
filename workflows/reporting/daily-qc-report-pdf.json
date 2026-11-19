@@ -1,0 +1,414 @@
+{
+  "name": "Daily QC Report (PDF to Telegram)",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  prod_date,\n  form_date,\n  bag_no,\n  wing_cnc,\n  wing_qi,\n  drum_cnc,\n  drum_qi,\n  thigh_cnc,\n  thigh_qi,\n  keel_cnc,\n  keel_qi,\n  rib_cnc,\n  rib_qi\nFROM qc_form.cutcheck_product_a\nWHERE prod_date = '{{$node[\"Code2\"].json[\"report_prod_date\"]}}'\nORDER BY form_date, bag_no;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        304,
+        -32
+      ],
+      "name": "Execute a SQL query"
+    },
+    {
+      "parameters": {
+        "jsCode": "let data = items.map(i => i.json);\n\n// ---------- CNC definitions ----------\nconst CNC_LABELS = {\n  A: \"Angel\",\n  D: \"Deformed\",\n  DP: \"Deep\",\n  LG: \"Large\",\n  LN: \"Long\",\n  M: \"Missing piece\",\n  N: \"Non-disjointed thigh\",\n  OC: \"Off centre\",\n  SH: \"Short\",\n  SM: \"Small\",\n  T: \"Tip\",\n  TR: \"Trim\",\n  UC: \"Uncut\",\n  X: \"Extra piece\"\n};\n\n// ---------- OQI definitions ----------\nconst OQI_LABELS = {\n  SKL: \"Split keel\",\n  BW: \"Broken wing\",\n  BD: \"Broken drum\",\n  BRR: \"Broken rib\",\n  WT: \"Wing tip missing\",\n  BR: \"Bruises\",\n  DD: \"Disease dermatitis\",\n  DB: \"Disease blister\",\n  DO: \"Disease others\",\n  SB: \"Stain bile\",\n  SI: \"Stain ingesta\",\n  FEC: \"Fecal\",\n  TE: \"Skin tear\",\n  KT: \"Knife trims\",\n  LHK: \"Long hock\",\n  SHK: \"Short hock\",\n  BT: \"Broken thigh\",\n  LUN: \"Lungs\",\n  HEA: \"Heart\",\n  LIV: \"Liver\",\n  GIZ: \"Gizzard\",\n  SPL: \"Spleen\",\n  WIN: \"Windpipe\",\n  CR: \"Crop\",\n  GAL: \"Gall bladder\",\n  INT: \"Intestine\",\n  CLO: \"Cloaca\",\n  FEA: \"Feathers\",\n  NEC: \"Necks\",\n  CUT: \"Cut\",\n  F: \"Fat\"\n};\n\nconst CNC_CODES = new Set([\n  \"A\",\"D\",\"DP\",\"LG\",\"LN\",\"M\",\"N\",\"OC\",\"SH\",\"SM\",\"T\",\"TR\",\"UC\",\"X\"\n]);\n\nconst OQI_CODES = new Set([\n  \"SKL\",\"BW\",\"BD\",\"BRR\",\"WT\",\"BR\",\"DD\",\"DB\",\"DO\",\"SB\",\"SI\",\"FEC\",\"TE\",\"KT\",\n  \"LHK\",\"SHK\",\"BT\",\n  \"LUN\",\"HEA\",\"LIV\",\"GIZ\",\"SPL\",\"WIN\",\"CR\",\"GAL\",\"INT\",\"CLO\",\n  \"FEA\",\"NEC\",\"CUT\",\"F\"\n]);\n\nfunction parseCodes(str) {\n  if (!str) return [];\n\n  const normalized = String(str)\n    .toUpperCase()\n    .replace(/,/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n\n  const matches = normalized.match(/\\d+\\s*[A-Z]+/g);\n  if (!matches) return [];\n\n  return matches.map(v => {\n    const qty = parseInt(v, 10);\n    const code = v.replace(/\\d+/g, \"\").trim().toUpperCase();\n    return { qty: isNaN(qty) ? 0 : qty, code };\n  });\n}\n\nfunction initCut() {\n  return { defects: {} };\n}\n\nfunction addDefect(cut, qty, label) {\n  cut.defects[label] = (cut.defects[label] || 0) + qty;\n}\n\nfunction processCNC(cut, value) {\n  for (const { qty, code } of parseCodes(value)) {\n    if (!CNC_CODES.has(code)) continue;\n    addDefect(cut, qty, CNC_LABELS[code] || code);\n  }\n}\n\nfunction processOQI(cut, value) {\n  for (const { qty, code } of parseCodes(value)) {\n    if (!OQI_CODES.has(code)) continue;\n    addDefect(cut, qty, OQI_LABELS[code] || code);\n  }\n}\n\nfunction formatDateLong(dateStr) {\n  if (!dateStr) return \"N/A\";\n\n  const d = new Date(dateStr);\n  if (isNaN(d)) return dateStr;\n\n  const months = [\n    \"January\", \"February\", \"March\", \"April\", \"May\", \"June\",\n    \"July\", \"August\", \"September\", \"October\", \"November\", \"December\"\n  ];\n\n  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;\n}\n\nfunction formatDateForFile(dateStr) {\n  if (!dateStr) return \"Unknown-Date\";\n\n  const d = new Date(dateStr);\n  if (isNaN(d)) {\n    return String(dateStr)\n      .trim()\n      .replace(/[^\\w-]+/g, \"-\")\n      .replace(/-+/g, \"-\")\n      .replace(/^-|-$/g, \"\");\n  }\n\n  const day = d.getDate();\n  const monthNames = [\n    \"January\", \"February\", \"March\", \"April\", \"May\", \"June\",\n    \"July\", \"August\", \"September\", \"October\", \"November\", \"December\"\n  ];\n  const month = monthNames[d.getMonth()];\n  const year = d.getFullYear();\n\n  return `${day}-${month}-${year}`;\n}\n\nfunction escapeHtml(str) {\n  return String(str ?? \"\")\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\");\n}\n\nfunction defectsToSortedArray(defects) {\n  return Object.entries(defects)\n    .map(([name, qty]) => ({ name, qty }))\n    .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name));\n}\n\nfunction totalFromDefects(defects) {\n  return Object.values(defects).reduce((a, b) => a + b, 0);\n}\n\nfunction formatMainDefects(defects) {\n  const arr = defectsToSortedArray(defects);\n  if (!arr.length) return \"-\";\n  return arr.map(x => `${x.name} ${x.qty}`).join(\", \");\n}\n\nfunction renderCutTable(title, cuts) {\n  const cutNames = [\"Wing\", \"Drum\", \"Thigh\", \"Keel\", \"Rib\"];\n\n  const rows = cutNames.map(name => {\n    const defects = cuts[name].defects;\n    return `\n      <tr>\n        <td>${escapeHtml(name)}</td>\n        <td class=\"num\">${totalFromDefects(defects)}</td>\n        <td>${escapeHtml(formatMainDefects(defects))}</td>\n      </tr>\n    `;\n  }).join(\"\");\n\n  return `\n    <div class=\"section\">\n      <div class=\"section-title\">${escapeHtml(title)}</div>\n      <table>\n        <thead>\n          <tr>\n            <th style=\"width: 22%;\">Cut Part</th>\n            <th style=\"width: 14%;\">Total</th>\n            <th>Main Defects</th>\n          </tr>\n        </thead>\n        <tbody>\n          ${rows}\n        </tbody>\n      </table>\n    </div>\n  `;\n}\n\n// ---------- accumulators ----------\nconst cncCuts = {\n  Wing: initCut(),\n  Drum: initCut(),\n  Thigh: initCut(),\n  Keel: initCut(),\n  Rib: initCut()\n};\n\nconst oqiCuts = {\n  Wing: initCut(),\n  Drum: initCut(),\n  Thigh: initCut(),\n  Keel: initCut(),\n  Rib: initCut()\n};\n\nlet prodDate = \"N/A\";\nconst formKeySet = new Set();\n\nlet totalCNC = 0;\nlet oqiTotalCount = 0;\n\n// ---------- process rows ----------\nfor (const row of data) {\n  if (row.prod_date) prodDate = row.prod_date;\n\n  const formKey = row.form_date || row.header_id || row.id;\n  if (formKey) formKeySet.add(String(formKey));\n\n  processCNC(cncCuts.Wing, row.wing_cnc);\n  processCNC(cncCuts.Drum, row.drum_cnc);\n  processCNC(cncCuts.Thigh, row.thigh_cnc);\n  processCNC(cncCuts.Keel, row.keel_cnc);\n  processCNC(cncCuts.Rib, row.rib_cnc);\n\n  processOQI(oqiCuts.Wing, row.wing_qi);\n  processOQI(oqiCuts.Drum, row.drum_qi);\n  processOQI(oqiCuts.Thigh, row.thigh_qi);\n  processOQI(oqiCuts.Keel, row.keel_qi);\n  processOQI(oqiCuts.Rib, row.rib_qi);\n\n  for (const key of [\"wing_cnc\", \"drum_cnc\", \"thigh_cnc\", \"keel_cnc\", \"rib_cnc\"]) {\n    for (const { qty, code } of parseCodes(row[key])) {\n      if (CNC_CODES.has(code)) totalCNC += qty;\n    }\n  }\n\n  for (const key of [\"wing_qi\", \"drum_qi\", \"thigh_qi\", \"keel_qi\", \"rib_qi\"]) {\n    for (const { qty, code } of parseCodes(row[key])) {\n      if (OQI_CODES.has(code)) oqiTotalCount += qty;\n    }\n  }\n}\n\n// ---------- totals ----------\nconst formCount = formKeySet.size || 1;\nconst oqiTotal = oqiTotalCount;\nconst safeProdDate = formatDateForFile(prodDate);\nconst baseFileName = `ProductA-QC-Report-${safeProdDate}`;\n\n// ---------- html ----------\nconst html = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>Product A - Cut Check Summary</title>\n  <style>\n    * { box-sizing: border-box; }\n\n    body {\n      margin: 0;\n      padding: 28px;\n      font-family: Arial, Helvetica, sans-serif;\n      color: #111827;\n      background: #ffffff;\n    }\n\n    .page {\n      width: 100%;\n      max-width: 1100px;\n      margin: 0 auto;\n    }\n\n    .title {\n      font-size: 30px;\n      font-weight: 700;\n      margin-bottom: 16px;\n      letter-spacing: 0.2px;\n    }\n\n    .meta {\n      margin-bottom: 22px;\n      line-height: 1.8;\n      font-size: 16px;\n    }\n\n    .summary-box {\n      border: 1px solid #d1d5db;\n      border-radius: 10px;\n      padding: 0;\n      overflow: hidden;\n      margin-bottom: 26px;\n    }\n\n    .summary-header {\n      background: #f3f4f6;\n      padding: 12px 16px;\n      font-size: 18px;\n      font-weight: 700;\n      border-bottom: 1px solid #d1d5db;\n    }\n\n    .section {\n      margin-top: 24px;\n      margin-bottom: 26px;\n    }\n\n    .section-title {\n      font-size: 20px;\n      font-weight: 800;\n      margin-bottom: 10px;\n    }\n\n    table {\n      width: 100%;\n      border-collapse: collapse;\n      table-layout: fixed;\n      font-size: 15px;\n    }\n\n    th, td {\n      border: 1px solid #d1d5db;\n      padding: 10px 12px;\n      vertical-align: top;\n      word-wrap: break-word;\n    }\n\n    th {\n      background: #f9fafb;\n      text-align: left;\n      font-weight: 700;\n    }\n\n    td.num {\n      text-align: right;\n      font-weight: 700;\n      white-space: nowrap;\n    }\n\n  </style>\n</head>\n<body>\n  <div class=\"page\">\n    <div class=\"title\">Product A - Cut Check Summary</div>\n\n    <div class=\"meta\">\n      <div><b>Production Date:</b> ${escapeHtml(formatDateLong(prodDate))}</div>\n      <div><b>Forms Count:</b> ${formCount}</div>\n    </div>\n\n    <div class=\"summary-box\">\n      <div class=\"summary-header\">Overall Summary</div>\n      <table>\n        <thead>\n          <tr>\n            <th style=\"width: 28%;\">Metric</th>\n            <th style=\"width: 22%;\">CNC</th>\n            <th style=\"width: 22%;\">OQI</th>\n          </tr>\n        </thead>\n        <tbody>\n          <tr>\n            <td>Total</td>\n            <td class=\"num\">${totalCNC}</td>\n            <td class=\"num\">${oqiTotal}</td>\n          </tr>\n        </tbody>\n      </table>\n    </div>\n\n    ${renderCutTable(\"CNC by Cut Part\", cncCuts)}\n    ${renderCutTable(\"OQI by Cut Part\", oqiCuts)}\n\n  </div>\n</body>\n</html>\n`;\n\nreturn [{\n  json: {\n    prod_date: prodDate,\n    form_count: formCount,\n    total_cnc: totalCNC,\n    total_oqi: oqiTotal,\n    pdf_file_name: `${baseFileName}.pdf`,\n    html_file_name: `${baseFileName}.html`\n  },\n  binary: {\n    html: {\n      data: Buffer.from(html).toString(\"base64\"),\n      mimeType: \"text/html\",\n      fileName: \"index.html\"\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -32
+      ],
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawTs = $json.timestamp;\n\n// Take only the local date part from the timestamp string\nconst datePart = String(rawTs).slice(0, 10); // e.g. 2026-03-12\n\nif (!/^\\d{4}-\\d{2}-\\d{2}$/.test(datePart)) {\n  throw new Error(`Invalid timestamp received: ${rawTs}`);\n}\n\n// Create a safe date from the date part only\nconst reportDate = new Date(datePart + \"T00:00:00\");\nreportDate.setDate(reportDate.getDate() - 1);\n\nfunction pad(n) {\n  return String(n).padStart(2, '0');\n}\n\nfunction fmtDate(d) {\n  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;\n}\n\nreturn [\n  {\n    json: {\n      trigger_timestamp: rawTs,\n      report_prod_date: fmtDate(reportDate)\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        80
+      ],
+      "name": "Code2"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 07 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        80
+      ],
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  id,\n  prod_date,\n  form_date,\n  bag_no,\n  wing_cnc,\n  wing_qi,\n  drum_cnc,\n  drum_qi,\n  thigh_cnc,\n  thigh_qi,\n  keel_cnc,\n  keel_qi,\n  rib_cnc,\n  rib_qi\nFROM qc_form.cutcheck_product_b\nWHERE prod_date = '{{$node[\"Code2\"].json[\"report_prod_date\"]}}'\nORDER BY form_date, bag_no;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        320,
+        256
+      ],
+      "name": "Execute a SQL query1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{$json.cnt}}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        96,
+        80
+      ],
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS cnt\nFROM qc_form.cutcheck_product_a\nWHERE prod_date = '{{$json.report_prod_date}}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        -48,
+        80
+      ],
+      "name": "Execute a SQL query2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://gotenberg:3000/forms/chromium/convert/html",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "html"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        672,
+        -32
+      ],
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "let data = items.map(i => i.json);\n\n// ---------- CNC definitions ----------\nconst CNC_LABELS = {\n  A: \"Angel\",\n  D: \"Deformed\",\n  DP: \"Deep\",\n  LG: \"Large\",\n  LN: \"Long\",\n  M: \"Missing piece\",\n  N: \"Non-disjointed thigh\",\n  OC: \"Off centre\",\n  SH: \"Short\",\n  SM: \"Small\",\n  T: \"Tip\",\n  TR: \"Trim\",\n  UC: \"Uncut\",\n  X: \"Extra piece\"\n};\n\n// ---------- OQI definitions ----------\nconst OQI_LABELS = {\n  SKL: \"Split keel\",\n  BW: \"Broken wing\",\n  BD: \"Broken drum\",\n  BRR: \"Broken rib\",\n  WT: \"Wing tip missing\",\n  BR: \"Bruises\",\n  DD: \"Disease dermatitis\",\n  DB: \"Disease blister\",\n  DO: \"Disease others\",\n  SB: \"Stain bile\",\n  SI: \"Stain ingesta\",\n  FEC: \"Fecal\",\n  TE: \"Skin tear\",\n  KT: \"Knife trims\",\n  LHK: \"Long hock\",\n  SHK: \"Short hock\",\n  BT: \"Broken thigh\",\n  LUN: \"Lungs\",\n  HEA: \"Heart\",\n  LIV: \"Liver\",\n  GIZ: \"Gizzard\",\n  SPL: \"Spleen\",\n  WIN: \"Windpipe\",\n  CR: \"Crop\",\n  GAL: \"Gall bladder\",\n  INT: \"Intestine\",\n  CLO: \"Cloaca\",\n  F: \"Fat\",\n  TL: \"Tail\",\n  YS: \"Yellow scale\",\n  SCR: \"Scratch\",\n  FEA: \"Feathers\",\n  NEC: \"Necks\",\n  CUT: \"Cuticle\"\n};\n\nconst CNC_CODES = new Set([\n  \"A\",\"D\",\"DP\",\"LG\",\"LN\",\"M\",\"N\",\"OC\",\"SH\",\"SM\",\"T\",\"TR\",\"UC\",\"X\"\n]);\n\nconst OQI_CODES = new Set([\n  \"SKL\",\"BW\",\"BD\",\"BRR\",\"WT\",\"BR\",\"DD\",\"DB\",\"DO\",\"SB\",\"SI\",\"FEC\",\"TE\",\"KT\",\n  \"LHK\",\"SHK\",\"BT\",\n  \"LUN\",\"HEA\",\"LIV\",\"GIZ\",\"SPL\",\"WIN\",\"CR\",\"GAL\",\"INT\",\"CLO\",\n  \"F\",\"TL\",\"YS\",\"SCR\",\"FEA\",\"NEC\",\"CUT\"\n]);\n\nfunction parseCodes(str) {\n  if (!str) return [];\n\n  const normalized = String(str)\n    .toUpperCase()\n    .replace(/,/g, \" \")\n    .replace(/\\s+/g, \" \")\n    .trim();\n\n  const matches = normalized.match(/\\d+\\s*[A-Z]+/g);\n  if (!matches) return [];\n\n  return matches.map(v => {\n    const qty = parseInt(v, 10);\n    const code = v.replace(/\\d+/g, \"\").trim().toUpperCase();\n    return { qty: isNaN(qty) ? 0 : qty, code };\n  });\n}\n\nfunction initCut() {\n  return { defects: {} };\n}\n\nfunction addDefect(cut, qty, label) {\n  cut.defects[label] = (cut.defects[label] || 0) + qty;\n}\n\nfunction processCNC(cut, value) {\n  for (const { qty, code } of parseCodes(value)) {\n    if (!CNC_CODES.has(code)) continue;\n    addDefect(cut, qty, CNC_LABELS[code] || code);\n  }\n}\n\nfunction processOQI(cut, value) {\n  for (const { qty, code } of parseCodes(value)) {\n    if (!OQI_CODES.has(code)) continue;\n    addDefect(cut, qty, OQI_LABELS[code] || code);\n  }\n}\n\nfunction formatDateLong(dateStr) {\n  if (!dateStr) return \"N/A\";\n\n  const d = new Date(dateStr);\n  if (isNaN(d)) return dateStr;\n\n  const months = [\n    \"January\", \"February\", \"March\", \"April\", \"May\", \"June\",\n    \"July\", \"August\", \"September\", \"October\", \"November\", \"December\"\n  ];\n\n  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;\n}\nfunction formatDateForFile(dateStr) {\n  if (!dateStr) return \"Unknown-Date\";\n\n  const d = new Date(dateStr);\n  if (isNaN(d)) {\n    return String(dateStr)\n      .trim()\n      .replace(/[^\\w-]+/g, \"-\")\n      .replace(/-+/g, \"-\")\n      .replace(/^-|-$/g, \"\");\n  }\n\n  const day = d.getDate();\n  const monthNames = [\n    \"January\", \"February\", \"March\", \"April\", \"May\", \"June\",\n    \"July\", \"August\", \"September\", \"October\", \"November\", \"December\"\n  ];\n  const month = monthNames[d.getMonth()];\n  const year = d.getFullYear();\n\n  return `${day}-${month}-${year}`;\n}\nfunction escapeHtml(str) {\n  return String(str ?? \"\")\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\");\n}\n\nfunction defectsToSortedArray(defects) {\n  return Object.entries(defects)\n    .map(([name, qty]) => ({ name, qty }))\n    .sort((a, b) => b.qty - a.qty);\n}\n\nfunction totalFromDefects(defects) {\n  return Object.values(defects).reduce((a, b) => a + b, 0);\n}\n\nfunction formatMainDefects(defects) {\n  const arr = defectsToSortedArray(defects);\n  if (!arr.length) return \"-\";\n  return arr.map(x => `${x.name} ${x.qty}`).join(\", \");\n}\n\nfunction renderCutTable(title, cuts) {\n  const cutNames = [\"Wing\", \"Drum\", \"Thigh\", \"Keel\", \"Rib\"];\n\n  const rows = cutNames.map(name => {\n    const defects = cuts[name].defects;\n    return `\n      <tr>\n        <td>${escapeHtml(name)}</td>\n        <td class=\"num\">${totalFromDefects(defects)}</td>\n        <td>${escapeHtml(formatMainDefects(defects))}</td>\n      </tr>\n    `;\n  }).join(\"\");\n\n  return `\n    <div class=\"section\">\n      <div class=\"section-title\">${escapeHtml(title)}</div>\n      <table>\n        <thead>\n          <tr>\n            <th style=\"width: 22%;\">Cut Part</th>\n            <th style=\"width: 14%;\">Total</th>\n            <th>Main Defects</th>\n          </tr>\n        </thead>\n        <tbody>\n          ${rows}\n        </tbody>\n      </table>\n    </div>\n  `;\n}\n\n\n// ---------- accumulators ----------\nconst cncCuts = {\n  Wing: initCut(),\n  Drum: initCut(),\n  Thigh: initCut(),\n  Keel: initCut(),\n  Rib: initCut()\n};\n\nconst oqiCuts = {\n  Wing: initCut(),\n  Drum: initCut(),\n  Thigh: initCut(),\n  Keel: initCut(),\n  Rib: initCut()\n};\n\nlet prodDate = \"N/A\";\nconst formKeySet = new Set();\n\nlet totalCNC = 0;\nlet oqiTotalCount = 0;\n\n// ---------- process rows ----------\nfor (const row of data) {\n  if (row.prod_date) prodDate = row.prod_date;\n\n  const formKey = row.form_date || row.header_id || row.id;\n  if (formKey) formKeySet.add(String(formKey));\n\n  processCNC(cncCuts.Wing, row.wing_cnc);\n  processCNC(cncCuts.Drum, row.drum_cnc);\n  processCNC(cncCuts.Thigh, row.thigh_cnc);\n  processCNC(cncCuts.Keel, row.keel_cnc);\n  processCNC(cncCuts.Rib, row.rib_cnc);\n\n  processOQI(oqiCuts.Wing, row.wing_qi);\n  processOQI(oqiCuts.Drum, row.drum_qi);\n  processOQI(oqiCuts.Thigh, row.thigh_qi);\n  processOQI(oqiCuts.Keel, row.keel_qi);\n  processOQI(oqiCuts.Rib, row.rib_qi);\n\n  for (const key of [\"wing_cnc\", \"drum_cnc\", \"thigh_cnc\", \"keel_cnc\", \"rib_cnc\"]) {\n    for (const { qty, code } of parseCodes(row[key])) {\n      if (CNC_CODES.has(code)) totalCNC += qty;\n    }\n  }\n  \n  for (const key of [\"wing_qi\", \"drum_qi\", \"thigh_qi\", \"keel_qi\", \"rib_qi\"]) {\n    for (const { qty, code } of parseCodes(row[key])) {\n      if (OQI_CODES.has(code)) oqiTotalCount += qty;\n    }\n  }\n}\n\n// ---------- totals ----------\nconst formCount = formKeySet.size || 1;\nconst oqiTotal = oqiTotalCount;\nconst safeProdDate = formatDateForFile(prodDate);\nconst baseFileName = `ProductB-QC-Report-${safeProdDate}`;\n\n// ---------- html ----------\nconst html = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>Product B - Cut Check Summary</title>\n  <style>\n    * { box-sizing: border-box; }\n\n    body {\n      margin: 0;\n      padding: 28px;\n      font-family: Arial, Helvetica, sans-serif;\n      color: #111827;\n      background: #ffffff;\n    }\n\n    .page {\n      width: 100%;\n      max-width: 1100px;\n      margin: 0 auto;\n    }\n\n    .title {\n      font-size: 30px;\n      font-weight: 700;\n      margin-bottom: 16px;\n      letter-spacing: 0.2px;\n    }\n\n    .meta {\n      margin-bottom: 22px;\n      line-height: 1.8;\n      font-size: 16px;\n    }\n\n    .summary-box {\n      border: 1px solid #d1d5db;\n      border-radius: 10px;\n      padding: 0;\n      overflow: hidden;\n      margin-bottom: 26px;\n    }\n\n    .summary-header {\n      background: #f3f4f6;\n      padding: 12px 16px;\n      font-size: 18px;\n      font-weight: 700;\n      border-bottom: 1px solid #d1d5db;\n    }\n\n    .section {\n      margin-top: 24px;\n      margin-bottom: 26px;\n    }\n\n    .section-title {\n      font-size: 20px;\n      font-weight: 800;\n      margin-bottom: 10px;\n    }\n\n    table {\n      width: 100%;\n      border-collapse: collapse;\n      table-layout: fixed;\n      font-size: 15px;\n    }\n    \n    th, td {\n      border: 1px solid #d1d5db;\n      padding: 10px 12px;\n      vertical-align: top;\n      word-wrap: break-word;\n    }\n    \n    th {\n      background: #f9fafb;\n      text-align: left;\n      font-weight: 700;\n    }\n    \n    td.num {\n      text-align: right;\n      font-weight: 700;\n      white-space: nowrap;\n    }\n\n  </style>\n</head>\n<body>\n  <div class=\"page\">\n    <div class=\"title\">Product B - Cut Check Summary</div>\n\n    <div class=\"meta\">\n      <div><b>Production Date:</b> ${escapeHtml(formatDateLong(prodDate))}</div>\n      <div><b>Forms Count:</b> ${formCount}</div>\n    </div>\n\n    <div class=\"summary-box\">\n      <div class=\"summary-header\">Overall Summary</div>\n      <table>\n        <thead>\n          <tr>\n            <th style=\"width: 28%;\">Metric</th>\n            <th style=\"width: 22%;\">CNC</th>\n            <th style=\"width: 22%;\">OQI</th>\n          </tr>\n        </thead>\n        <tbody>\n          <tr>\n            <td>Total</td>\n            <td class=\"num\">${totalCNC}</td>\n            <td class=\"num\">${oqiTotal}</td>\n          </tr>\n        </tbody>\n      </table>\n    </div>\n\n    ${renderCutTable(\"CNC by Cut Part\", cncCuts)}\n    ${renderCutTable(\"OQI by Cut Part\", oqiCuts)}\n\n  </div>\n</body>\n</html>\n`;\n\nreturn [{\n  json: {\n    prod_date: prodDate,\n    form_count: formCount,\n    total_cnc: totalCNC,\n    total_oqi: oqiTotal,\n    pdf_file_name: `${baseFileName}.pdf`,\n    html_file_name: `${baseFileName}.html`\n  },\n  binary: {\n    html: {\n      data: Buffer.from(html).toString(\"base64\"),\n      mimeType: \"text/html\",\n      fileName: \"index.html\"\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        256
+      ],
+      "name": "Code4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://gotenberg:3000/forms/chromium/convert/html",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "html"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        672,
+        256
+      ],
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "binaryData": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1056,
+        -32
+      ],
+      "name": "Send a document1",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "binaryData": true,
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1024,
+        256
+      ],
+      "name": "Send a document",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of items) {\n  if (!item.binary?.data) {\n    throw new Error(\"No PDF found in item.binary.data\");\n  }\n\n  item.binary.data.fileName = item.json.pdf_file_name || \"ProductA-QC-Report.pdf\";\n  item.binary.data.fileExtension = \"pdf\";\n  item.binary.data.mimeType = \"application/pdf\";\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        -32
+      ],
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of items) {\n  if (!item.binary?.data) {\n    throw new Error(\"No PDF found in item.binary.data\");\n  }\n\n  item.binary.data.fileName = item.json.pdf_file_name || \"ProductB-QC-Report.pdf\";\n  item.binary.data.fileExtension = \"pdf\";\n  item.binary.data.mimeType = \"application/pdf\";\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        256
+      ],
+      "name": "Code1"
+    },
+    {
+      "parameters": {
+        "content": "Product A",
+        "height": 80,
+        "width": 150,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        288,
+        -144
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "Product B",
+        "height": 80,
+        "width": 150,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        320,
+        480
+      ],
+      "typeVersion": 1,
+      "name": "Sticky Note1"
+    }
+  ],
+  "connections": {
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code2": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "Code4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query2": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code4": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Send a document1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Send a document",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timezone": "Asia/Singapore"
+  }
+}
