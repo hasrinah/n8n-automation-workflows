@@ -37,6 +37,10 @@ flowchart LR
 
 [Details →](workflows/reporting)
 
+**Sample output** (generated from fake data, [PDF](docs/sample-qc-report.pdf)):
+
+<img src="docs/images/qc-report-sample.png" alt="Sample QC report PDF" width="520">
+
 ## 👥 Early-Leave Approval Request
 
 Employees submit an early-leave request through a web form. The workflow saves it, finds the employee's head of department, and emails them the request with **Approve** and **Reject** buttons.
@@ -51,6 +55,10 @@ flowchart LR
 ```
 
 [Details →](workflows/hr-automation)
+
+**Sample email** (fake data):
+
+<img src="docs/images/approval-email-sample.png" alt="Sample approval email" width="520">
 
 ## 🌡️ Temperature Monitoring
 

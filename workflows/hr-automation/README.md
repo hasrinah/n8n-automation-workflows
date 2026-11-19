@@ -30,6 +30,12 @@ flowchart LR
 
 > The Approve and Reject buttons call a second webhook (`/webhook/early-leave-decision`), which records the decision in the sheet. That workflow is not included in this repository.
 
+## Sample Email
+
+The email the HOD receives (fake data):
+
+<img src="../../docs/images/approval-email-sample.png" alt="Sample approval email" width="600">
+
 ## Requirements
 
 - A Google Sheet with:
